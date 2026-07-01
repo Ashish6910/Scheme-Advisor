@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+.env
+chroma.db/
+status
+schemes_mygov_data.json

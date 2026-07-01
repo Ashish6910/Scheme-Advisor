@@ -1,0 +1,11 @@
+playwright
+google-generativeai
+chromadb
+sentence-transformers
+streamlit
+python-dotenv
+langchain
+langchain-community
+langchain-huggingface
+langgraph
+langchain_google_genai
