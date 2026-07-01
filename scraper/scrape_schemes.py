@@ -7,9 +7,7 @@ from playwright.async_api import async_playwright
 BASE = "https://www.myscheme.gov.in"
 
 
-# =========================
-# ✅ Aggresive scrolling
-# =========================
+# Aggresive scrolling
 async def human_scroll(page):
     for _ in range(80):  # increased scroll cycles
         await page.mouse.wheel(0, random.randint(500, 1200))
@@ -20,9 +18,7 @@ async def human_scroll(page):
         await page.wait_for_timeout(2000)
 
 
-# =========================
-# ✅ Collecting URLs
-# =========================
+# Collecting URLs
 async def get_scheme_urls(page):
     urls = set()
 
@@ -30,14 +26,14 @@ async def get_scheme_urls(page):
     await page.goto(f"{BASE}/search")
     await page.wait_for_timeout(5000)
 
-    # ✅ force initial load
+    # Initial load
     for _ in range(5):
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await page.wait_for_timeout(3000)
 
     prev_count = 0
 
-    # ✅ more rounds → more data
+    # For scraping more data
     for i in range(10):
         print(f"\n🔄 Round {i+1}")
 
@@ -58,7 +54,7 @@ async def get_scheme_urls(page):
 
         print(f"📊 URLs collected: {len(urls)}")
 
-        # ✅ click load buttons aggressively
+        #Click load buttons aggressively
         buttons = await page.query_selector_all("button")
 
         for btn in buttons:
@@ -72,7 +68,7 @@ async def get_scheme_urls(page):
             except:
                 pass
 
-        # ✅ force more loading
+        #Force more loading
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await page.wait_for_timeout(3000)
 
@@ -84,9 +80,7 @@ async def get_scheme_urls(page):
     return list(urls)
 
 
-# =========================
-# ✅ Scrapes each page
-# =========================
+# Scrapes each page
 async def scrape_scheme(context, url):
     page = await context.new_page()
 
@@ -104,7 +98,7 @@ async def scrape_scheme(context, url):
             }
         """)
 
-        print(f"✅ {name}")
+        print(f" {name}")
 
         return {
             "name": name,
@@ -120,9 +114,7 @@ async def scrape_scheme(context, url):
         await page.close()
 
 
-# =========================
-# ✅ Main function
-# =========================
+# Main function
 async def main():
     async with async_playwright() as p:
 
@@ -137,9 +129,9 @@ async def main():
         # Step 1: Collect URLs
         urls = await get_scheme_urls(page)
 
-        print(f"\n✅ TOTAL URLs: {len(urls)}\n")
+        print(f"\n TOTAL URLs: {len(urls)}\n")
 
-        # ✅ Step 2: scrape in batches (prevents slowdown)
+        #Step 2: scrape in batches (prevents slowdown)
         results = []
 
         for i in range(0, len(urls), 5):
@@ -154,19 +146,17 @@ async def main():
 
         await browser.close()
 
-    # ✅ saves with timestamp
+    #saves with timestamp
     filename = f"schemes_run_{int(time.time())}.json"
 
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-    print("\n✅ DONE")
-    print("✅ File saved:", filename)
-    print("✅ Schemes scraped:", len(data))
+    print("\nDONE")
+    print("File saved:", filename)
+    print("Schemes scraped:", len(data))
 
 
-# =========================
-# ✅ Run function
-# =========================
+# Run function
 if __name__ == "__main__":
     asyncio.run(main())
