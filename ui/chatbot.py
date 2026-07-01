@@ -1,5 +1,5 @@
 """
-✅ Streamlit chatbot
+Streamlit chatbot
 
 Run:
     streamlit run ui/chatbot.py
@@ -10,14 +10,13 @@ import os
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage
 
-# ✅ Import path
+# Import path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from agent.scheme_agent import run_agent
 
 
-# =========================
-# ✅ Page configuration
-# =========================
+# Page configuration
+
 st.set_page_config(
     page_title="Indian Scheme Advisor",
     page_icon="🏛️",
@@ -31,9 +30,8 @@ st.markdown(
 st.divider()
 
 
-# ================================
-# ✅ Session state initialization
-# ================================
+# Session state initialization
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
     st.session_state.graph_history = []
@@ -44,21 +42,22 @@ if "messages" not in st.session_state:
         "Tell me about yourself so I can recommend the best schemes for you."
     )
 
-    # ✅ UI message
+    # UI message
+    
     st.session_state.messages.append({
         "role": "assistant",
         "content": welcome
     })
 
-    # ✅ Agent memory
+    # Agent memory
+    
     st.session_state.graph_history.append(
         AIMessage(content=welcome)
     )
 
 
-# =========================
-# ✅ Display chat history
-# =========================
+# Display chat history
+
 for msg in st.session_state.messages:
     role = msg["role"]
     avatar = "🏛️" if role == "assistant" else "👤"
@@ -67,12 +66,11 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 
-# =========================
-# ✅ User Input
-# =========================
+# User Input
+
 if user_input := st.chat_input("Type your message..."):
 
-    # ✅ Add user message to UI
+    # Add user message to UI
     st.session_state.messages.append({
         "role": "user",
         "content": user_input
@@ -81,8 +79,7 @@ if user_input := st.chat_input("Type your message..."):
     with st.chat_message("user", avatar="👤"):
         st.markdown(user_input)
 
-    # =========================
-    # ✅ Agent run
+    # Agent run
     # =========================
     with st.chat_message("assistant", avatar="🏛️"):
         with st.spinner("🔎 Finding relevant schemes for you..."):
@@ -95,13 +92,13 @@ if user_input := st.chat_input("Type your message..."):
 
                 reply = response.get("text", "No response generated.")
 
-                # ✅ Show reply
+                # Show reply
                 st.markdown(reply)
 
-                # ✅ Update memory
+                # Update memory
                 st.session_state.graph_history = updated_history
 
-                # ✅ Add assistant reply to UI
+                # Add assistant reply to UI
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": reply
@@ -111,9 +108,8 @@ if user_input := st.chat_input("Type your message..."):
                 st.error(f"❌ Error: {str(e)}")
 
 
-# =========================
-# ✅ Collapsable sidebar
-# =========================
+# Collapsable sidebar
+
 with st.sidebar:
     st.markdown("### 📘 About This Project")
 
@@ -123,7 +119,7 @@ with st.sidebar:
 ### 🚨 Problem
 Citizens must manually search through hundreds of schemes on myscheme.gov.in.
 
-### ✅ Solution
+### Solution
 This AI system:
 - Understands your profile  
 - Searches schemes using semantic search (RAG)  
