@@ -23,7 +23,7 @@ st.set_page_config(
     layout="centered"
 )
 
-st.markdown("## 🏛️ Indian Government Scheme Advisor")
+st.markdown("## 🏛️ Yojana Sahayak - Indian Government Scheme Advisor")
 st.markdown(
     "Built using **LangGraph + Sentence Transformers + ChromaDB + Google Gemini**"
 )
