@@ -10,18 +10,17 @@ from langgraph.graph import StateGraph, END
 
 from rag.build_vector_store import search_schemes as search_vector_store
 
-# =========================================
-# ✅ Environment configuration and loading 
-# =========================================
+
+# Environment configuration and loading 
 load_dotenv()
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 
-# =========================
-# ✅ Agent State details
-# =========================
+
+#Agent State details
+
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     user_profile: dict
