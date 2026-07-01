@@ -20,28 +20,28 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 
-# =========================
-# ✅ Configuration
-# =========================
+# Configuration
+
 load_dotenv()
 
 DATA_FILE = "schemes_mygov_data.json"
 CHROMA_PATH = "./chroma.db"
 
-# ✅ Embedding model (fast + good)
+# Embedding model 
+
 embeddings = HuggingFaceEmbeddings(
     model_name="all-MiniLM-L6-v2"
 )
 
-# ✅ Chunking strategy
+# Chunking strategy
+
 text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=600,
     chunk_overlap=80
 )
 
-# ===========================
-# ✅ Clean + Data validation
-# ===========================
+# Clean + Data validation
+
 def clean_schemes(raw_schemes):
     """Remove bad / duplicate data"""
     unique = {}
@@ -58,9 +58,8 @@ def clean_schemes(raw_schemes):
     return list(unique.values())
 
 
-# =================================
-# ✅ Schems conversion to document
-# =================================
+# Schems conversion to document
+
 def scheme_to_document(scheme):
     content = f"""
 ### Scheme Name
@@ -104,9 +103,8 @@ def scheme_to_document(scheme):
     )
 
 
-# =========================
-# ✅ Building vector store
-# =========================
+# Building vector store
+
 def build_vector_store():
     print("=" * 60)
     print("🚀 BUILDING VECTOR STORE")
@@ -117,17 +115,20 @@ def build_vector_store():
         print("Run scraper first.")
         return
 
-    # ✅ Load data
+    # Load data
+
     with open(DATA_FILE, encoding="utf-8") as f:
         raw_schemes = json.load(f)
 
     print(f"📊 Raw schemes loaded: {len(raw_schemes)}")
 
-    # ✅ Clean data
-    schemes = clean_schemes(raw_schemes)
-    print(f"✅ Clean schemes: {len(schemes)}")
+    # Clean data
 
-    # ✅ Convert to documents
+    schemes = clean_schemes(raw_schemes)
+    print(f"Clean schemes: {len(schemes)}")
+
+    # Convert to documents
+    
     docs = []
     for scheme in schemes:
         doc = scheme_to_document(scheme)
@@ -136,7 +137,8 @@ def build_vector_store():
 
     print(f"📄 Total chunks created: {len(docs)}")
 
-    # ✅ Delete old DB (optional but recommended)
+    # Delete old DB (optional step)
+    
     if os.path.exists(CHROMA_PATH):
         import shutil
         shutil.rmtree(CHROMA_PATH)
@@ -144,7 +146,8 @@ def build_vector_store():
 
     print("🧠 Generating embeddings...")
 
-    # ✅ Create vector DB
+    # Create vector DB
+    
     vector_store = Chroma.from_documents(
         documents=docs,
         embedding=embeddings,
@@ -153,14 +156,13 @@ def build_vector_store():
 
     vector_store.persist()
 
-    print(f"\n✅ Stored {vector_store._collection.count()} chunks")
+    print(f"\nStored {vector_store._collection.count()} chunks")
     print("🎯 Ready for chatbot!")
     print("Next: streamlit run ui/chatbot.py")
 
 
-# =========================
-# ✅ Loading Vector Store
-# =========================
+# Loading Vector Store
+
 def get_vector_store():
     return Chroma(
         persist_directory=CHROMA_PATH,
@@ -168,9 +170,8 @@ def get_vector_store():
     )
 
 
-# ===========================
-# ✅ Search schemes function
-# ===========================
+# Search schemes function
+
 def search_schemes(query: str, k: int = 10):
     vector_store = get_vector_store()
 
@@ -192,8 +193,7 @@ def search_schemes(query: str, k: int = 10):
     return output
 
 
-# =========================
-# ✅ Main function
-# =========================
+# Main function
+
 if __name__ == "__main__":
     build_vector_store()
