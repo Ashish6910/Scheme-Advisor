@@ -1,162 +1,213 @@
-import asyncio
-import json
-import random
-import time
-from playwright.async_api import async_playwright
+import os
+from typing import TypedDict, Annotated, List
+import operator
+from dotenv import load_dotenv
 
-BASE = "https://www.myscheme.gov.in"
+import google.generativeai as genai
 
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langgraph.graph import StateGraph, END
 
-# Aggresive scrolling
-async def human_scroll(page):
-    for _ in range(80):  # increased scroll cycles
-        await page.mouse.wheel(0, random.randint(500, 1200))
-        await page.wait_for_timeout(random.randint(500, 1200))
+from rag.build_vector_store import search_schemes as search_vector_store
 
-        # force bottom loading
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await page.wait_for_timeout(2000)
+# Environment configuration and loading 
 
+load_dotenv()
 
-# Collecting URLs
-async def get_scheme_urls(page):
-    urls = set()
-
-    print("🚀 Opening search page...")
-    await page.goto(f"{BASE}/search")
-    await page.wait_for_timeout(5000)
-
-    # Initial load
-    for _ in range(5):
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await page.wait_for_timeout(3000)
-
-    prev_count = 0
-
-    # For scraping more data
-    for i in range(10):
-        print(f"\n🔄 Round {i+1}")
-
-        await human_scroll(page)
-
-        
-        links = await page.evaluate("""
-            () => {
-                return Array.from(document.querySelectorAll('a[href]'))
-                    .filter(a => a.href.includes('/schemes/'))
-                    .map(a => a.href);
-            }
-        """)
-
-        # add unique links
-        for link in links:
-            urls.add(link.split("?")[0])
-
-        print(f"📊 URLs collected: {len(urls)}")
-
-        #Click load buttons aggressively
-        buttons = await page.query_selector_all("button")
-
-        for btn in buttons:
-            try:
-                txt = (await btn.inner_text()).lower()
-
-                if any(x in txt for x in ["more", "load", "view", "next"]):
-                    await btn.click()
-                    await page.wait_for_timeout(3000)
-
-            except:
-                pass
-
-        #Force more loading
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await page.wait_for_timeout(3000)
-
-        if len(urls) == prev_count:
-            print("⚠️ No new URLs, continuing anyway...")
-
-        prev_count = len(urls)
-
-    return list(urls)
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel("gemini-2.5-flash")
 
 
-# Scrapes each page
-async def scrape_scheme(context, url):
-    page = await context.new_page()
+# Agent State details
 
+class AgentState(TypedDict):
+    messages: Annotated[List[BaseMessage], operator.add]
+    user_profile: dict
+    schemes_found: list
+    recommendation: str
+    next_action: str
+
+
+# LLM Helper function
+
+def call_llm(prompt: str) -> str:
     try:
-        await page.goto(url, wait_until="domcontentloaded")
-        await page.wait_for_timeout(4000)
+        response = model.generate_content(prompt)
+        return response.text if response.text else ""
+    except Exception as e:
+        return f"Error: {str(e)}"
 
-        name = await page.title()
-        name = name.replace("| myScheme", "").strip()
 
-        text = await page.evaluate("""
-            () => {
-                const main = document.querySelector('main');
-                return main ? main.innerText : document.body.innerText;
-            }
-        """)
+# NODE 1: Understanding user input
 
-        print(f" {name}")
+def understand_user(state: AgentState) -> AgentState:
+    messages = state["messages"]
+    history = "\n".join([m.content for m in messages])
 
+    # ✅ Avoiding infinite loop
+    if len(messages) > 2:
         return {
-            "name": name,
-            "description": text[:1000],  # optimized size
-            "url": url
+            **state,
+            "messages": state["messages"] + [
+                AIMessage(content="Got your details. Finding best schemes for you...")
+            ],
+            "next_action": "search"
         }
 
-    except Exception as e:
-        print(f"❌ Error: {url} → {e}")
-        return None
+    prompt = f"""
+You are a Government Scheme Advisor.
 
-    finally:
-        await page.close()
+Ask the user for missing details:
+- State
+- Income
+- Occupation
 
+Conversation:
+{history}
 
-# Main function
-async def main():
-    async with async_playwright() as p:
+Ask ONLY one question.
+"""
 
-        browser = await p.chromium.launch(headless=False)
+    response = call_llm(prompt)
 
-        context = await browser.new_context(
-            viewport={"width": 1280, "height": 800}
-        )
-
-        page = await context.new_page()
-
-        # Step 1: Collect URLs
-        urls = await get_scheme_urls(page)
-
-        print(f"\n TOTAL URLs: {len(urls)}\n")
-
-        #Step 2: scrape in batches (prevents slowdown)
-        results = []
-
-        for i in range(0, len(urls), 5):
-            batch = urls[i:i+5]
-
-            tasks = [scrape_scheme(context, url) for url in batch]
-            batch_results = await asyncio.gather(*tasks)
-
-            results.extend(batch_results)
-
-        data = [r for r in results if r]
-
-        await browser.close()
-
-    #saves with timestamp
-    filename = f"schemes_run_{int(time.time())}.json"
-
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-    print("\nDONE")
-    print("File saved:", filename)
-    print("Schemes scraped:", len(data))
+    return {
+        **state,
+        "messages": state["messages"] + [AIMessage(content=response)],
+        "next_action": "understand"
+    }
 
 
-# Run function
-if __name__ == "__main__":
-    asyncio.run(main())
+# NODE 2: Searching relevant schemes as per user input
+
+def search_node(state: AgentState) -> AgentState:
+    history = "\n".join([m.content for m in state["messages"]])
+
+    prompt = f"""
+Convert this into a short search query:
+
+{history}
+
+Return ONLY the query.
+"""
+
+    query = call_llm(prompt).strip()
+
+    print("[SEARCH QUERY]:", query)
+
+    results = search_vector_store(query, k=10)
+
+    return {
+        **state,
+        "schemes_found": results,
+        "next_action": "evaluate"
+    }
+
+
+# NODE 3: Evaluating the user input
+
+def evaluate_node(state: AgentState) -> AgentState:
+    schemes = state.get("schemes_found", [])
+    history = "\n".join([m.content for m in state["messages"]])
+
+    if not schemes:
+        return {
+            **state,
+            "recommendation": "No schemes found.",
+            "next_action": "recommend"
+        }
+
+    schemes_text = "\n\n".join([
+        f"Scheme: {s['name']}\nBenefits: {s['benefits']}\nEligibility: {s['eligibility']}\nURL: {s['url']}"
+        for s in schemes
+    ])
+
+    prompt = f"""
+User profile:
+{history}
+
+Available schemes:
+{schemes_text}
+
+Suggest best 3 schemes with:
+- Name
+- Benefits
+- Why suitable
+- URL
+"""
+
+    recommendation = call_llm(prompt)
+
+    return {
+        **state,
+        "recommendation": recommendation,
+        "next_action": "recommend"
+    }
+
+
+# NODE 4: Final ouput displayed to the user
+
+def recommend_node(state: AgentState) -> AgentState:
+    return {
+        **state,
+        "messages": state["messages"] + [
+            AIMessage(content=state["recommendation"])
+        ],
+        "next_action": END
+    }
+
+
+# Router details
+
+def route(state: AgentState):
+    return state.get("next_action", "understand")
+
+
+# Building graph using LangGraph framework
+
+def build_graph():
+    graph = StateGraph(AgentState)
+
+    graph.add_node("understand", understand_user)
+    graph.add_node("search", search_node)
+    graph.add_node("evaluate", evaluate_node)
+    graph.add_node("recommend", recommend_node)
+
+    graph.set_entry_point("understand")
+
+    graph.add_conditional_edges("understand", route)
+    graph.add_conditional_edges("search", route)
+    graph.add_conditional_edges("evaluate", route)
+
+    graph.add_edge("recommend", END)
+
+    return graph.compile()
+
+
+app = build_graph()
+
+
+# Agent run function
+
+def run_agent(user_message: str, history: list):
+
+    state = {
+        "messages": history + [HumanMessage(content=user_message)],
+        "user_profile": {},
+        "schemes_found": [],
+        "recommendation": "",
+        "next_action": "understand"
+    }
+
+    result = app.invoke(state)
+
+    ai_messages = [
+        m for m in result["messages"]
+        if isinstance(m, AIMessage)
+    ]
+
+    reply = ai_messages[-1].content if ai_messages else "Something went wrong."
+
+    return {
+        "type": "message",
+        "text": reply
+    }, result["messages"]
